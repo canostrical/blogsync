@@ -2,7 +2,7 @@
 
 First draft for a simple long-form text note ([NIP-23][nip23]) sync to article folder.
 
-Provide author PubKeys as command line args, e.g.:
+Run like this:
 
 `go run main.go example_conf.json`
 

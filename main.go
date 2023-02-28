@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -13,26 +14,34 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+type config struct {
+	Folder  string
+	PubKeys []string
+	Relay   string
+}
+
+type frontMatter struct {
+	Title string `json:"title"`
+}
+
 const kindLongForm = 30023
-
-// TODO: support multiple, configurable relays - jraedisch
-const relayURL = "wss://nostr-pub.wellorder.net"
-
-// TODO: make folder configurable - jraedisch
-const folder = "articles"
 
 var pubKeyRE = regexp.MustCompile("^[a-f0-9]{64}$")
 
 func main() {
-	ctx := context.Background()
-	relay, err := nostr.RelayConnect(ctx, relayURL)
+	conf, err := loadConfig()
 	panicIfErr(err)
 
-	pubKeys := os.Args[1:]
-	panicIfErr(validatePubKeys(pubKeys))
+	ctx := context.Background()
+
+	// TODO: support multiple, configurable relays - jraedisch
+	relay, err := nostr.RelayConnect(ctx, conf.Relay)
+	panicIfErr(err)
+
+	panicIfErr(validatePubKeys(conf.PubKeys))
 
 	filters := nostr.Filters{{
-		Authors: pubKeys,
+		Authors: conf.PubKeys,
 		Kinds:   []int{kindLongForm},
 	}}
 	subscription := relay.Subscribe(ctx, filters)
@@ -45,9 +54,21 @@ func main() {
 	}()
 
 	for event := range subscription.Events {
-		panicIfErr(persist(event))
+		panicIfErr(persist(event, conf.Folder))
 	}
 	log.Println("EOS")
+}
+
+func loadConfig() (*config, error) {
+	if len(os.Args) < 2 {
+		return nil, errors.New("no config provided")
+	}
+	f, err := os.Open(os.Args[1])
+	if err != nil {
+		return nil, err
+	}
+	config := &config{}
+	return config, json.NewDecoder(f).Decode(config)
 }
 
 func validatePubKeys(pubKeys []string) error {
@@ -66,13 +87,13 @@ func validatePubKeys(pubKeys []string) error {
 	return nil
 }
 
-func persist(event *nostr.Event) error {
-	d, err := extractDTagValue(event)
-	if err != nil {
-		return err
+func persist(event *nostr.Event, folder string) error {
+	d, ok := extractTagValue(event, "d")
+	if !ok {
+		return errors.New("missing d tag")
 	}
 
-	path, err := filePath(d)
+	path, err := filePath(folder, d)
 	if err != nil {
 		return err
 	}
@@ -80,6 +101,17 @@ func persist(event *nostr.Event) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
+	}
+
+	fM, ok := extractFrontMatter(event)
+	if ok {
+		bytes, err := json.MarshalIndent(fM, "", "  ")
+		if err != nil {
+			log.Printf("error marshalling frontmatter from event: %s", event.ID)
+		} else {
+			_, err = f.Write(append(bytes, []byte("\n")...))
+			panicIfErr(err)
+		}
 	}
 
 	_, err = f.WriteString(event.Content)
@@ -90,19 +122,24 @@ func persist(event *nostr.Event) error {
 	return nil
 }
 
-func extractDTagValue(event *nostr.Event) (string, error) {
-	dTag := event.Tags.GetFirst([]string{"d"})
-	if dTag == nil {
-		return "", fmt.Errorf("no d tag for event: %s", event.ID)
-	}
-	dValue := dTag.Value()
-	if dValue == "" {
-		return "", fmt.Errorf("empty d tag for event: %s", event.ID)
-	}
-	return dValue, nil
+func extractFrontMatter(event *nostr.Event) (*frontMatter, bool) {
+	title, ok := extractTagValue(event, "title")
+	return &frontMatter{Title: title}, ok
 }
 
-func filePath(id string) (string, error) {
+func extractTagValue(event *nostr.Event, tagName string) (string, bool) {
+	tag := event.Tags.GetFirst([]string{tagName})
+	if tag == nil {
+		return "", false
+	}
+	value := strings.TrimSpace(tag.Value())
+	if value == "" {
+		return "", false
+	}
+	return value, true
+}
+
+func filePath(folder string, id string) (string, error) {
 	return url.JoinPath(folder, fmt.Sprintf("%s.md", id))
 }
 

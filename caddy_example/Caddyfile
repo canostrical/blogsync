@@ -1,0 +1,17 @@
+{
+    log default {
+        level DEBUG
+    }
+}
+
+http://localhost:2019
+
+root * homepage
+
+try_files {path}.html {path}
+
+file_server
+templates
+encode gzip
+
+rewrite /* /index.html

@@ -21,7 +21,8 @@ type config struct {
 }
 
 type frontMatter struct {
-	Title string `json:"title"`
+	Title   string `json:"title"`
+	Updated string `json:"updated"`
 }
 
 const kindLongForm = 30023
@@ -124,7 +125,7 @@ func persist(event *nostr.Event, folder string) error {
 
 func extractFrontMatter(event *nostr.Event) (*frontMatter, bool) {
 	title, ok := extractTagValue(event, "title")
-	return &frontMatter{Title: title}, ok
+	return &frontMatter{Title: title, Updated: event.CreatedAt.Format("2006-01-02")}, ok
 }
 
 func extractTagValue(event *nostr.Event, tagName string) (string, bool) {

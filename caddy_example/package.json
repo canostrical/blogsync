@@ -1,0 +1,16 @@
+{
+  "name": "caddy_example",
+  "version": "1.0.0",
+  "description": "example homepage served by Caddy, updatable via Nostr long-form notes",
+  "main": "Caddyfile",
+  "repository": "https://github.com/canostrical/blogsync",
+  "author": "@jraedisch",
+  "license": "MIT",
+  "dependencies": {
+    "postcss": "^8.4.21",
+    "tailwindcss": "^3.2.7"
+  },
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/stylesheets/application.css -o ./homepage/assets/styles.css --minify"
+  }
+}

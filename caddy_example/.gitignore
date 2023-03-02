@@ -1,2 +1,5 @@
+homepage/assets/*
 homepage/markdown/*
+!homepage/assets/.keep
 !homepage/markdown/.keep
+node_modules

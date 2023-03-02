@@ -1,7 +1,7 @@
 {
-    log default {
-        level DEBUG
-    }
+	log default {
+		level DEBUG
+	}
 }
 
 http://localhost:2019
@@ -14,4 +14,4 @@ file_server
 templates
 encode gzip
 
-rewrite /* /index.html
+rewrite /articles/* /articles/index.html

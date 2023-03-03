@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"log"
@@ -10,14 +11,16 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 )
 
 type config struct {
-	Folder  string
-	PubKeys []string
-	Relay   string
+	SiteMapPath    string
+	MarkdownFolder string
+	PubKeys        []string
+	Relay          string
 }
 
 type frontMatter struct {
@@ -34,6 +37,9 @@ func main() {
 	panicIfErr(err)
 
 	ctx := context.Background()
+
+	sm, err := loadOrInitSiteMap(conf.SiteMapPath)
+	panicIfErr(err)
 
 	// TODO: support multiple, configurable relays - jraedisch
 	relay, err := nostr.RelayConnect(ctx, conf.Relay)
@@ -55,7 +61,17 @@ func main() {
 	}()
 
 	for event := range subscription.Events {
-		panicIfErr(persist(event, conf.Folder))
+		d, ok := extractTagValue(event, "d")
+		if !ok {
+			log.Fatalf("event missing d tag: %v", event)
+		}
+
+		mdPath, err := markdownPath(conf, d)
+		panicIfErr(err)
+		if sm.Add(mdPath, event.CreatedAt) {
+			panicIfErr(persist(event, mdPath))
+			panicIfErr(sm.persist())
+		}
 	}
 	log.Println("EOS")
 }
@@ -68,6 +84,7 @@ func loadConfig() (*config, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 	config := &config{}
 	return config, json.NewDecoder(f).Decode(config)
 }
@@ -88,21 +105,12 @@ func validatePubKeys(pubKeys []string) error {
 	return nil
 }
 
-func persist(event *nostr.Event, folder string) error {
-	d, ok := extractTagValue(event, "d")
-	if !ok {
-		return errors.New("missing d tag")
-	}
-
-	path, err := filePath(folder, d)
-	if err != nil {
-		return err
-	}
-
+func persist(event *nostr.Event, path string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	fM, ok := extractFrontMatter(event)
 	if ok {
@@ -123,6 +131,80 @@ func persist(event *nostr.Event, folder string) error {
 	return nil
 }
 
+type siteMap struct {
+	XMLName     xml.Name      `xml:"urlset"`
+	XMLNS       string        `xml:"xmlns,attr"`
+	path        string        `xml:"-"`
+	SiteMapURLs []*siteMapURL `xml:"url"`
+}
+
+const sitemapNS = "http://www.sitemaps.org/schemas/sitemap/0.9"
+
+func loadOrInitSiteMap(path string) (*siteMap, error) {
+	sm := &siteMap{path: path, XMLNS: sitemapNS}
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("initialized sitemap: %s", path)
+			return sm, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	dec := xml.NewDecoder(f)
+	log.Printf("loaded sitemap: %s", path)
+	return sm, dec.Decode(sm)
+}
+
+func (sm *siteMap) Add(loc string, lastMod time.Time) (changed bool) {
+	found := false
+	for _, url := range sm.SiteMapURLs {
+		if url.Loc == loc {
+			found = true
+			if url.LastMod.Before(lastMod) {
+				url.LastMod = lastMod
+				changed = true
+			}
+		}
+	}
+	if found {
+		return
+	}
+
+	sm.SiteMapURLs = append(sm.SiteMapURLs, &siteMapURL{Loc: loc, LastMod: lastMod})
+	changed = true
+	return
+}
+
+var declaration = []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+
+func (sm *siteMap) marshall() ([]byte, error) {
+	bytes, err := xml.MarshalIndent(sm, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(declaration, bytes...), nil
+}
+
+func (sm *siteMap) persist() error {
+	f, err := os.Create(sm.path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bytes, err := sm.marshall()
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(bytes)
+	return err
+}
+
+type siteMapURL struct {
+	Loc     string    `xml:"loc"`
+	LastMod time.Time `xml:"lastmod,omitempty"`
+}
+
 func extractFrontMatter(event *nostr.Event) (*frontMatter, bool) {
 	title, ok := extractTagValue(event, "title")
 	return &frontMatter{Title: title, Updated: event.CreatedAt.Format("2006-01-02")}, ok
@@ -140,8 +222,8 @@ func extractTagValue(event *nostr.Event, tagName string) (string, bool) {
 	return value, true
 }
 
-func filePath(folder string, id string) (string, error) {
-	return url.JoinPath(folder, fmt.Sprintf("%s.md", id))
+func markdownPath(conf *config, id string) (string, error) {
+	return url.JoinPath(conf.MarkdownFolder, fmt.Sprintf("%s.md", id))
 }
 
 func panicIfErr(err error) {

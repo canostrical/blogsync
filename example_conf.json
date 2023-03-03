@@ -1,6 +1,7 @@
 {
     "Relay": "wss://nostr-pub.wellorder.net",
-    "Folder": "caddy_example/homepage/markdown",
+    "MarkdownFolder": "caddy_example/homepage/markdown",
+    "SiteMapPath": "caddy_example/homepage/sitemap.xml",
     "PubKeys": [
         "8071afec6d98299978ef26dc6a87f62b0c0f3eab66047b5dbe46e83c29a6a391"
     ]

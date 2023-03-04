@@ -131,6 +131,24 @@ func persist(event *nostr.Event, path string) error {
 	return nil
 }
 
+type orderedList struct {
+	XMLName xml.Name  `xml:"ol"`
+	Anchors []*anchor `xml:"li>a"`
+}
+
+func (ol *orderedList) marshall() ([]byte, error) {
+	bytes, err := xml.MarshalIndent(ol, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return bytes, nil
+}
+
+type anchor struct {
+	Text string `xml:",innerxml"`
+	Href string `xml:"href,attr"`
+}
+
 type siteMap struct {
 	XMLName     xml.Name      `xml:"urlset"`
 	XMLNS       string        `xml:"xmlns,attr"`

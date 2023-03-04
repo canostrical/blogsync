@@ -19,6 +19,31 @@ func TestValidatePubKeysWithNpub(t *testing.T) {
 	}
 }
 
+func TestOrderedList(t *testing.T) {
+	ol := &orderedList{
+		Anchors: []*anchor{
+			{Text: "a1", Href: "h1"},
+			{Text: "a2", Href: "h2"},
+		},
+	}
+
+	expected := "<ol>\n" +
+		"  <li>\n" +
+		"    <a href=\"h1\">a1</a>\n" +
+		"    <a href=\"h2\">a2</a>\n" +
+		"  </li>\n" +
+		"</ol>"
+
+	bytes, err := ol.marshall()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	actual := string(bytes)
+	if actual != expected {
+		t.Errorf("expected %v, received %v", expected, actual)
+	}
+}
+
 func TestSiteMapMarshalling(t *testing.T) {
 	sm := &siteMap{XMLNS: sitemapNS}
 	t3 := time.Date(2019, 12, 23, 22, 30, 0, 0, time.UTC)

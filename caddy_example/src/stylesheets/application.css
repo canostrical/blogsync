@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+    @apply m-4
+}
+
+ol {
+    @apply list-disc ml-4
+}

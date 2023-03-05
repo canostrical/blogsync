@@ -4,4 +4,4 @@ homepage/markdown/*
 !homepage/markdown/.keep
 node_modules
 homepage/feed.xml
-templates/articles.html
+homepage/templates/articles.html

@@ -17,14 +17,15 @@ import (
 )
 
 type config struct {
-	FeedPath       string
-	MarkdownFolder string
-	PubKeys        []string
-	Relay          string
+	FeedPath          string
+	ArticleLinkPrefix string
+	MarkdownFolder    string
+	PubKeys           []string
+	Relay             string
 }
 
 type frontMatter struct {
-	Title   string `json:"title"`
+	Title   string `json:"title,omitempty"`
 	Updated string `json:"updated"`
 }
 
@@ -66,9 +67,12 @@ func main() {
 			log.Fatalf("event missing d tag: %v", event)
 		}
 
-		mdPath, err := markdownPath(conf, d)
+		arPath, err := articlePath(conf, d)
 		panicIfErr(err)
-		if sm.Add(mdPath, event.CreatedAt) {
+		title, ok := extractTagValue(event, "title")
+		if ok && sm.Add(title, arPath, event.CreatedAt) {
+			mdPath, err := markdownPath(conf, d)
+			panicIfErr(err)
 			panicIfErr(persist(event, mdPath))
 			panicIfErr(sm.persist())
 		}
@@ -112,15 +116,13 @@ func persist(event *nostr.Event, path string) error {
 	}
 	defer f.Close()
 
-	fM, ok := extractFrontMatter(event)
-	if ok {
-		bytes, err := json.MarshalIndent(fM, "", "  ")
-		if err != nil {
-			log.Printf("error marshalling frontmatter from event: %s", event.ID)
-		} else {
-			_, err = f.Write(append(bytes, []byte("\n")...))
-			panicIfErr(err)
-		}
+	fM := extractFrontMatter(event)
+	bytes, err := json.MarshalIndent(fM, "", "  ")
+	if err != nil {
+		log.Printf("error marshalling frontmatter from event: %s", event.ID)
+	} else {
+		_, err = f.Write(append(bytes, []byte("\n")...))
+		panicIfErr(err)
 	}
 
 	_, err = f.WriteString(event.Content)
@@ -136,7 +138,7 @@ type orderedList struct {
 	Anchors []*anchor `xml:"li>a"`
 }
 
-func (ol *orderedList) marshall() ([]byte, error) {
+func (ol *orderedList) marshal() ([]byte, error) {
 	bytes, err := xml.MarshalIndent(ol, "", "  ")
 	if err != nil {
 		return nil, err
@@ -174,13 +176,14 @@ func loadOrInitFeed(path string) (*feed, error) {
 	return fd, dec.Decode(fd)
 }
 
-func (fd *feed) Add(href string, updated time.Time) (changed bool) {
+func (fd *feed) Add(title string, href string, date time.Time) (changed bool) {
 	found := false
 	for _, en := range fd.Entries {
 		if en.Link.Href == href {
 			found = true
-			if en.Updated.Before(updated) {
-				en.Updated = updated
+			if en.Updated.Before(date) {
+				en.Updated = date
+				en.Title = title
 				changed = true
 			}
 		}
@@ -189,14 +192,14 @@ func (fd *feed) Add(href string, updated time.Time) (changed bool) {
 		return
 	}
 
-	fd.Entries = append(fd.Entries, &entry{Link: &link{Href: href}, Updated: updated})
+	fd.Entries = append(fd.Entries, &entry{Title: title, Link: &link{Href: href}, Updated: date})
 	changed = true
 	return
 }
 
 var declaration = []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 
-func (fd *feed) marshall() ([]byte, error) {
+func (fd *feed) marshal() ([]byte, error) {
 	bytes, err := xml.MarshalIndent(fd, "", "  ")
 	if err != nil {
 		return nil, err
@@ -210,7 +213,7 @@ func (fd *feed) persist() error {
 		return err
 	}
 	defer f.Close()
-	bytes, err := fd.marshall()
+	bytes, err := fd.marshal()
 	if err != nil {
 		return err
 	}
@@ -219,6 +222,7 @@ func (fd *feed) persist() error {
 }
 
 type entry struct {
+	Title   string    `xml:"title"`
 	Link    *link     `xml:"link"`
 	Updated time.Time `xml:"updated"`
 }
@@ -227,9 +231,12 @@ type link struct {
 	Href string `xml:"href,attr"`
 }
 
-func extractFrontMatter(event *nostr.Event) (*frontMatter, bool) {
-	title, ok := extractTagValue(event, "title")
-	return &frontMatter{Title: title, Updated: event.CreatedAt.Format("2006-01-02")}, ok
+func extractFrontMatter(event *nostr.Event) *frontMatter {
+	title, _ := extractTagValue(event, "title")
+	return &frontMatter{
+		Title:   title,
+		Updated: event.CreatedAt.Format("2006-01-02"),
+	}
 }
 
 func extractTagValue(event *nostr.Event, tagName string) (string, bool) {
@@ -242,6 +249,10 @@ func extractTagValue(event *nostr.Event, tagName string) (string, bool) {
 		return "", false
 	}
 	return value, true
+}
+
+func articlePath(conf *config, id string) (string, error) {
+	return url.JoinPath(conf.ArticleLinkPrefix, id)
 }
 
 func markdownPath(conf *config, id string) (string, error) {

@@ -1,5 +1,6 @@
 {
     "Relay": "wss://nostr-pub.wellorder.net",
+    "ArticleLinkPrefix": "http://localhost:2019/articles",
     "MarkdownFolder": "caddy_example/homepage/markdown",
     "FeedPath": "caddy_example/homepage/feed.xml",
     "PubKeys": [

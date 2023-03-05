@@ -18,6 +18,7 @@ import (
 
 type config struct {
 	FeedPath          string
+	OrderedListPath   string
 	ArticleLinkPrefix string
 	MarkdownFolder    string
 	PubKeys           []string
@@ -70,11 +71,12 @@ func main() {
 		arPath, err := articlePath(conf, d)
 		panicIfErr(err)
 		title, ok := extractTagValue(event, "title")
-		if ok && sm.Add(title, arPath, event.CreatedAt) {
+		if ok && sm.add(title, arPath, event.CreatedAt) {
 			mdPath, err := markdownPath(conf, d)
 			panicIfErr(err)
 			panicIfErr(persist(event, mdPath))
 			panicIfErr(sm.persist())
+			panicIfErr(sm.persistOrderedList(conf.OrderedListPath))
 		}
 	}
 	log.Println("EOS")
@@ -176,7 +178,7 @@ func loadOrInitFeed(path string) (*feed, error) {
 	return fd, dec.Decode(fd)
 }
 
-func (fd *feed) Add(title string, href string, date time.Time) (changed bool) {
+func (fd *feed) add(title string, href string, date time.Time) (changed bool) {
 	found := false
 	for _, en := range fd.Entries {
 		if en.Link.Href == href {
@@ -195,6 +197,24 @@ func (fd *feed) Add(title string, href string, date time.Time) (changed bool) {
 	fd.Entries = append(fd.Entries, &entry{Title: title, Link: &link{Href: href}, Published: date, Updated: date})
 	changed = true
 	return
+}
+
+func (fd *feed) persistOrderedList(path string) error {
+	ol := &orderedList{Anchors: make([]*anchor, len(fd.Entries))}
+	for i, entry := range fd.Entries {
+		ol.Anchors[i] = &anchor{Href: entry.Link.Href, Text: entry.Title}
+	}
+	bytes, err := ol.marshal()
+	if err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(bytes)
+	return err
 }
 
 var declaration = []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")

@@ -49,10 +49,10 @@ func TestFeedMarshalling(t *testing.T) {
 	t3 := time.Date(2019, 12, 23, 22, 30, 0, 0, time.UTC)
 	t2 := t3.Add(-1 * time.Minute)
 	t1 := t2.Add(-1 * time.Minute)
-	fd.Add("titelA v1", "locA", t1)
-	fd.Add("titelB", "locB", t2)
-	fd.Add("titelA v3", "locA", t3)
-	fd.Add("titelA v2", "locA", t2)
+	fd.add("titelA v1", "locA", t1)
+	fd.add("titelB", "locB", t2)
+	fd.add("titelA v3", "locA", t3)
+	fd.add("titelA v2", "locA", t2)
 	expected := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
 		"<feed xmlns=\"http://www.w3.org/2005/Atom\">\n" +
 		"  <entry>\n" +

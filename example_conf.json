@@ -3,6 +3,7 @@
     "ArticleLinkPrefix": "http://localhost:2019/articles",
     "MarkdownFolder": "caddy_example/homepage/markdown",
     "FeedPath": "caddy_example/homepage/feed.xml",
+    "OrderedListPath": "caddy_example/templates/articles.html",
     "PubKeys": [
         "8071afec6d98299978ef26dc6a87f62b0c0f3eab66047b5dbe46e83c29a6a391"
     ]

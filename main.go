@@ -192,7 +192,7 @@ func (fd *feed) Add(title string, href string, date time.Time) (changed bool) {
 		return
 	}
 
-	fd.Entries = append(fd.Entries, &entry{Title: title, Link: &link{Href: href}, Updated: date})
+	fd.Entries = append(fd.Entries, &entry{Title: title, Link: &link{Href: href}, Published: date, Updated: date})
 	changed = true
 	return
 }
@@ -222,9 +222,10 @@ func (fd *feed) persist() error {
 }
 
 type entry struct {
-	Title   string    `xml:"title"`
-	Link    *link     `xml:"link"`
-	Updated time.Time `xml:"updated"`
+	Title     string    `xml:"title"`
+	Link      *link     `xml:"link"`
+	Published time.Time `xml:"published"`
+	Updated   time.Time `xml:"updated"`
 }
 
 type link struct {

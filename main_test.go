@@ -58,11 +58,13 @@ func TestFeedMarshalling(t *testing.T) {
 		"  <entry>\n" +
 		"    <title>titelA v3</title>\n" +
 		"    <link href=\"locA\"></link>\n" +
+		"    <published>2019-12-23T22:28:00Z</published>\n" +
 		"    <updated>2019-12-23T22:30:00Z</updated>\n" +
 		"  </entry>\n" +
 		"  <entry>\n" +
 		"    <title>titelB</title>\n" +
 		"    <link href=\"locB\"></link>\n" +
+		"    <published>2019-12-23T22:29:00Z</published>\n" +
 		"    <updated>2019-12-23T22:29:00Z</updated>\n" +
 		"  </entry>\n" +
 		"</feed>"

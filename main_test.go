@@ -40,37 +40,37 @@ func TestOrderedList(t *testing.T) {
 	}
 	actual := string(bytes)
 	if actual != expected {
-		t.Errorf("expected %v, received %v", expected, actual)
+		t.Errorf("expected \n%v, received \n%v", expected, actual)
 	}
 }
 
-func TestSiteMapMarshalling(t *testing.T) {
-	sm := &siteMap{XMLNS: sitemapNS}
+func TestFeedMarshalling(t *testing.T) {
+	fd := &feed{XMLNS: atomNS}
 	t3 := time.Date(2019, 12, 23, 22, 30, 0, 0, time.UTC)
 	t2 := t3.Add(-1 * time.Minute)
 	t1 := t2.Add(-1 * time.Minute)
-	sm.Add("locA", t1)
-	sm.Add("locB", t2)
-	sm.Add("locA", t3)
-	sm.Add("locA", t2)
+	fd.Add("locA", t1)
+	fd.Add("locB", t2)
+	fd.Add("locA", t3)
+	fd.Add("locA", t2)
 	expected := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-		"<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n" +
-		"  <url>\n" +
-		"    <loc>locA</loc>\n" +
-		"    <lastmod>2019-12-23T22:30:00Z</lastmod>\n" +
-		"  </url>\n" +
-		"  <url>\n" +
-		"    <loc>locB</loc>\n" +
-		"    <lastmod>2019-12-23T22:29:00Z</lastmod>\n" +
-		"  </url>\n" +
-		"</urlset>"
+		"<feed xmlns=\"http://www.w3.org/2005/Atom\">\n" +
+		"  <entry>\n" +
+		"    <link href=\"locA\"></link>\n" +
+		"    <updated>2019-12-23T22:30:00Z</updated>\n" +
+		"  </entry>\n" +
+		"  <entry>\n" +
+		"    <link href=\"locB\"></link>\n" +
+		"    <updated>2019-12-23T22:29:00Z</updated>\n" +
+		"  </entry>\n" +
+		"</feed>"
 
-	bytes, err := sm.marshall()
+	bytes, err := fd.marshall()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	actual := string(bytes)
 	if actual != expected {
-		t.Errorf("expected %v, received %v", expected, actual)
+		t.Errorf("expected \n%v, received \n%v", expected, actual)
 	}
 }

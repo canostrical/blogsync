@@ -17,7 +17,7 @@ import (
 )
 
 type config struct {
-	SiteMapPath    string
+	FeedPath       string
 	MarkdownFolder string
 	PubKeys        []string
 	Relay          string
@@ -38,7 +38,7 @@ func main() {
 
 	ctx := context.Background()
 
-	sm, err := loadOrInitSiteMap(conf.SiteMapPath)
+	sm, err := loadOrInitFeed(conf.FeedPath)
 	panicIfErr(err)
 
 	// TODO: support multiple, configurable relays - jraedisch
@@ -149,38 +149,38 @@ type anchor struct {
 	Href string `xml:"href,attr"`
 }
 
-type siteMap struct {
-	XMLName     xml.Name      `xml:"urlset"`
-	XMLNS       string        `xml:"xmlns,attr"`
-	path        string        `xml:"-"`
-	SiteMapURLs []*siteMapURL `xml:"url"`
+type feed struct {
+	XMLName xml.Name `xml:"feed"`
+	XMLNS   string   `xml:"xmlns,attr"`
+	path    string   `xml:"-"`
+	Entries []*entry `xml:"entry"`
 }
 
-const sitemapNS = "http://www.sitemaps.org/schemas/sitemap/0.9"
+const atomNS = "http://www.w3.org/2005/Atom"
 
-func loadOrInitSiteMap(path string) (*siteMap, error) {
-	sm := &siteMap{path: path, XMLNS: sitemapNS}
+func loadOrInitFeed(path string) (*feed, error) {
+	fd := &feed{path: path, XMLNS: atomNS}
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("initialized sitemap: %s", path)
-			return sm, nil
+			log.Printf("initialized feed: %s", path)
+			return fd, nil
 		}
 		return nil, err
 	}
 	defer f.Close()
 	dec := xml.NewDecoder(f)
-	log.Printf("loaded sitemap: %s", path)
-	return sm, dec.Decode(sm)
+	log.Printf("loaded feed: %s", path)
+	return fd, dec.Decode(fd)
 }
 
-func (sm *siteMap) Add(loc string, lastMod time.Time) (changed bool) {
+func (fd *feed) Add(href string, updated time.Time) (changed bool) {
 	found := false
-	for _, url := range sm.SiteMapURLs {
-		if url.Loc == loc {
+	for _, en := range fd.Entries {
+		if en.Link.Href == href {
 			found = true
-			if url.LastMod.Before(lastMod) {
-				url.LastMod = lastMod
+			if en.Updated.Before(updated) {
+				en.Updated = updated
 				changed = true
 			}
 		}
@@ -189,28 +189,28 @@ func (sm *siteMap) Add(loc string, lastMod time.Time) (changed bool) {
 		return
 	}
 
-	sm.SiteMapURLs = append(sm.SiteMapURLs, &siteMapURL{Loc: loc, LastMod: lastMod})
+	fd.Entries = append(fd.Entries, &entry{Link: &link{Href: href}, Updated: updated})
 	changed = true
 	return
 }
 
 var declaration = []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 
-func (sm *siteMap) marshall() ([]byte, error) {
-	bytes, err := xml.MarshalIndent(sm, "", "  ")
+func (fd *feed) marshall() ([]byte, error) {
+	bytes, err := xml.MarshalIndent(fd, "", "  ")
 	if err != nil {
 		return nil, err
 	}
 	return append(declaration, bytes...), nil
 }
 
-func (sm *siteMap) persist() error {
-	f, err := os.Create(sm.path)
+func (fd *feed) persist() error {
+	f, err := os.Create(fd.path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	bytes, err := sm.marshall()
+	bytes, err := fd.marshall()
 	if err != nil {
 		return err
 	}
@@ -218,9 +218,13 @@ func (sm *siteMap) persist() error {
 	return err
 }
 
-type siteMapURL struct {
-	Loc     string    `xml:"loc"`
-	LastMod time.Time `xml:"lastmod,omitempty"`
+type entry struct {
+	Link    *link     `xml:"link"`
+	Updated time.Time `xml:"updated"`
+}
+
+type link struct {
+	Href string `xml:"href,attr"`
 }
 
 func extractFrontMatter(event *nostr.Event) (*frontMatter, bool) {

@@ -45,21 +45,26 @@ func TestOrderedList(t *testing.T) {
 }
 
 func TestFeedMarshalling(t *testing.T) {
-	fd := &feed{XMLNS: atomNS}
+	fd := &feed{XMLNS: atomNS, Title: "Test Feed", ID: "feedid"}
 	t3 := time.Date(2019, 12, 23, 22, 30, 0, 0, time.UTC)
 	t2 := t3.Add(-1 * time.Minute)
 	t1 := t2.Add(-1 * time.Minute)
-	fd.add("titelA v1", "locA", t1)
-	fd.add("titelB", "locB", t2)
-	fd.add("titelA v3", "locA", t3)
-	fd.add("titelA v2", "locA", t2)
+	t0 := t1.Add(-1 * time.Minute)
+	fd.add("titelA v1", "locA", t1, "sumA v1", &t0)
+	fd.add("titelB", "locB", t2, "", nil)
+	fd.add("titelA v3", "locA", t3, "sumA v3", &t1)
+	fd.add("titelA v2", "locA", t2, "sumA v2", nil)
 	expected := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
 		"<feed xmlns=\"http://www.w3.org/2005/Atom\">\n" +
+		"  <id>feedid</id>\n" +
+		"  <title>Test Feed</title>\n" +
+		"  <updated>2019-12-23T22:30:00Z</updated>\n" +
 		"  <entry>\n" +
 		"    <title>titelA v3</title>\n" +
 		"    <link href=\"locA\"></link>\n" +
-		"    <published>2019-12-23T22:28:00Z</published>\n" +
+		"    <published>2019-12-23T22:27:00Z</published>\n" +
 		"    <updated>2019-12-23T22:30:00Z</updated>\n" +
+		"    <summary>sumA v3</summary>\n" +
 		"  </entry>\n" +
 		"  <entry>\n" +
 		"    <title>titelB</title>\n" +

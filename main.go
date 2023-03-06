@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,10 +18,12 @@ import (
 )
 
 type config struct {
-	FeedPath          string
-	OrderedListPath   string
 	ArticleLinkPrefix string
+	FeedID            string
+	FeedPath          string
+	FeedTitle         string
 	MarkdownFolder    string
+	OrderedListPath   string
 	PubKeys           []string
 	Relay             string
 }
@@ -40,7 +43,7 @@ func main() {
 
 	ctx := context.Background()
 
-	sm, err := loadOrInitFeed(conf.FeedPath)
+	fd, err := loadOrInitFeed(conf)
 	panicIfErr(err)
 
 	// TODO: support multiple, configurable relays - jraedisch
@@ -55,7 +58,6 @@ func main() {
 	}}
 	subscription := relay.Subscribe(ctx, filters)
 
-	// TODO: keep listening - jraedisch
 	go func() {
 		<-subscription.EndOfStoredEvents
 		subscription.Unsub()
@@ -70,13 +72,14 @@ func main() {
 
 		arPath, err := articlePath(conf, d)
 		panicIfErr(err)
+		summary, _ := extractTagValue(event, "summary")
 		title, ok := extractTagValue(event, "title")
-		if ok && sm.add(title, arPath, event.CreatedAt) {
+		if ok && fd.add(title, arPath, event.CreatedAt, summary, extractTime(event, "published_at")) {
 			mdPath, err := markdownPath(conf, d)
 			panicIfErr(err)
 			panicIfErr(persist(event, mdPath))
-			panicIfErr(sm.persist())
-			panicIfErr(sm.persistOrderedList(conf.OrderedListPath))
+			panicIfErr(fd.persist())
+			panicIfErr(fd.persistOrderedList())
 		}
 	}
 	log.Println("EOS")
@@ -154,37 +157,42 @@ type anchor struct {
 }
 
 type feed struct {
-	XMLName xml.Name `xml:"feed"`
-	XMLNS   string   `xml:"xmlns,attr"`
-	path    string   `xml:"-"`
-	Entries []*entry `xml:"entry"`
+	conf    *config   `xml:"-"`
+	XMLName xml.Name  `xml:"feed"`
+	XMLNS   string    `xml:"xmlns,attr"`
+	ID      string    `xml:"id"`
+	Title   string    `xml:"title"`
+	Updated time.Time `xml:"updated"`
+	Entries []*entry  `xml:"entry"`
 }
 
 const atomNS = "http://www.w3.org/2005/Atom"
 
-func loadOrInitFeed(path string) (*feed, error) {
-	fd := &feed{path: path, XMLNS: atomNS}
-	f, err := os.Open(path)
+func loadOrInitFeed(conf *config) (*feed, error) {
+	fd := &feed{conf: conf, XMLNS: atomNS, Title: conf.FeedTitle, ID: conf.FeedID}
+	f, err := os.Open(conf.FeedPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("initialized feed: %s", path)
+			log.Printf("initialized feed: %s", conf.FeedPath)
 			return fd, nil
 		}
 		return nil, err
 	}
 	defer f.Close()
 	dec := xml.NewDecoder(f)
-	log.Printf("loaded feed: %s", path)
+	log.Printf("loaded feed: %s", conf.FeedPath)
 	return fd, dec.Decode(fd)
 }
 
-func (fd *feed) add(title string, href string, date time.Time) (changed bool) {
+func (fd *feed) add(title string, href string, date time.Time, summary string, published *time.Time) (changed bool) {
 	found := false
 	for _, en := range fd.Entries {
 		if en.Link.Href == href {
 			found = true
 			if en.Updated.Before(date) {
+				fd.Updated = date
 				en.Updated = date
+				en.Summary = summary
 				en.Title = title
 				changed = true
 			}
@@ -194,12 +202,17 @@ func (fd *feed) add(title string, href string, date time.Time) (changed bool) {
 		return
 	}
 
-	fd.Entries = append(fd.Entries, &entry{Title: title, Link: &link{Href: href}, Published: date, Updated: date})
+	fd.Updated = date
+	en := &entry{Title: title, Link: &link{Href: href}, Published: date, Updated: date}
+	if published != nil {
+		en.Published = *published
+	}
+	fd.Entries = append(fd.Entries, en)
 	changed = true
 	return
 }
 
-func (fd *feed) persistOrderedList(path string) error {
+func (fd *feed) persistOrderedList() error {
 	ol := &orderedList{Anchors: make([]*anchor, len(fd.Entries))}
 	for i, entry := range fd.Entries {
 		ol.Anchors[i] = &anchor{Href: entry.Link.Href, Text: entry.Title}
@@ -208,7 +221,7 @@ func (fd *feed) persistOrderedList(path string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(path)
+	f, err := os.Create(fd.conf.OrderedListPath)
 	if err != nil {
 		return err
 	}
@@ -228,7 +241,7 @@ func (fd *feed) marshal() ([]byte, error) {
 }
 
 func (fd *feed) persist() error {
-	f, err := os.Create(fd.path)
+	f, err := os.Create(fd.conf.FeedPath)
 	if err != nil {
 		return err
 	}
@@ -246,6 +259,7 @@ type entry struct {
 	Link      *link     `xml:"link"`
 	Published time.Time `xml:"published"`
 	Updated   time.Time `xml:"updated"`
+	Summary   string    `xml:"summary,omitempty"`
 }
 
 type link struct {
@@ -270,6 +284,19 @@ func extractTagValue(event *nostr.Event, tagName string) (string, bool) {
 		return "", false
 	}
 	return value, true
+}
+
+func extractTime(event *nostr.Event, tagName string) *time.Time {
+	tag := event.Tags.GetFirst([]string{tagName})
+	if tag == nil {
+		return nil
+	}
+	sec, err := strconv.Atoi(tag.Value())
+	if err != nil {
+		return nil
+	}
+	t := time.Unix(int64(sec), 0)
+	return &t
 }
 
 func articlePath(conf *config, id string) (string, error) {

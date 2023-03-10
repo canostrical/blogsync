@@ -139,8 +139,8 @@ func persist(event *nostr.Event, path string) error {
 }
 
 type orderedList struct {
-	XMLName xml.Name  `xml:"ol"`
-	Anchors []*anchor `xml:"li>a"`
+	XMLName   xml.Name    `xml:"ol"`
+	ListItems []*listItem `xml:"li"`
 }
 
 func (ol *orderedList) marshal() ([]byte, error) {
@@ -149,6 +149,10 @@ func (ol *orderedList) marshal() ([]byte, error) {
 		return nil, err
 	}
 	return bytes, nil
+}
+
+type listItem struct {
+	Anchor *anchor `xml:"a"`
 }
 
 type anchor struct {
@@ -213,9 +217,9 @@ func (fd *feed) add(title string, href string, date time.Time, summary string, p
 }
 
 func (fd *feed) persistOrderedList() error {
-	ol := &orderedList{Anchors: make([]*anchor, len(fd.Entries))}
+	ol := &orderedList{ListItems: make([]*listItem, len(fd.Entries))}
 	for i, entry := range fd.Entries {
-		ol.Anchors[i] = &anchor{Href: entry.Link.Href, Text: entry.Title}
+		ol.ListItems[i] = &listItem{Anchor: &anchor{Href: entry.Link.Href, Text: entry.Title}}
 	}
 	bytes, err := ol.marshal()
 	if err != nil {
